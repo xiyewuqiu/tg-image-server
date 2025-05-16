@@ -45,7 +45,7 @@
 1. **克隆仓库**
 
 ```bash
-git clone https://github.com/your-username/tg-image-server.git
+git clone https://github.com/xiyewuqiu/tg-image-server.git
 cd tg-image-server
 ```
 
