@@ -1,0 +1,32 @@
+{
+  "name": "tg-image-server",
+  "version": "1.0.0",
+  "description": "基于Telegram的图床服务 - 服务器版本",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "setup": "node setup.js"
+  },
+  "keywords": [
+    "图床",
+    "telegram",
+    "server"
+  ],
+  "author": "",
+  "license": "AGPL-3.0-with-Commons-Clause",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-fileupload": "^1.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "type": "module"
+}
