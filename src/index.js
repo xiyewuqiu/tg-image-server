@@ -12,6 +12,9 @@ import fileRoutes from './routes/file.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
+// 中间件导入
+import { errorHandler, notFoundHandler, setupUncaughtErrorHandlers } from './middlewares/errorHandler.js';
+
 // 初始化环境变量
 dotenv.config();
 
@@ -19,17 +22,24 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// 设置未捕获的错误处理器
+setupUncaughtErrorHandlers();
+
 // 初始化Express应用
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 中间件
+// 基本中间件
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({
-  limits: { fileSize: 10 * 1024 * 1024 }, // 限制文件大小为10MB
-  abortOnLimit: true
+  limits: { 
+    fileSize: process.env.MAX_FILE_SIZE ? parseInt(process.env.MAX_FILE_SIZE) : 10 * 1024 * 1024 // 默认10MB
+  },
+  abortOnLimit: true,
+  useTempFiles: true,
+  tempFileDir: path.join(__dirname, '../temp/')
 }));
 
 // 静态文件服务
@@ -46,6 +56,12 @@ app.get('/', (req, res) => {
   res.redirect('/index.html');
 });
 
+// 404处理
+app.use(notFoundHandler);
+
+// 全局错误处理
+app.use(errorHandler);
+
 // 连接MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
@@ -53,14 +69,10 @@ mongoose.connect(process.env.MONGODB_URI)
     // 启动服务器
     app.listen(PORT, () => {
       console.log(`服务器运行在 http://localhost:${PORT}`);
+      console.log(`API文档: http://localhost:${PORT}/api-docs`);
     });
   })
   .catch(err => {
     console.error('MongoDB连接失败:', err);
+    process.exit(1);
   });
-
-// 错误处理中间件
-app.use((err, req, res, next) => {
-  console.error('服务器错误:', err);
-  res.status(500).json({ error: '服务器内部错误' });
-});
