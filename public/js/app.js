@@ -251,7 +251,6 @@ function initClipboard() {
 
 // 上传功能
 function initUpload() {
-    // 获取元素
     const dropArea = document.getElementById('dropArea');
     const fileInput = document.getElementById('fileInput');
     const uploadStatus = document.getElementById('uploadStatus');
@@ -261,215 +260,304 @@ function initUpload() {
     const htmlCode = document.getElementById('htmlCode');
     const mdCode = document.getElementById('mdCode');
     const uploadAgainBtn = document.getElementById('uploadAgainBtn');
+    
+    // 进度条元素
+    const uploadProgressContainer = document.getElementById('uploadProgressContainer');
+    const uploadProgressBar = document.getElementById('uploadProgressBar');
+    const uploadPercentage = document.getElementById('uploadPercentage');
+    const uploadFileName = document.getElementById('uploadFileName');
+    const uploadSpeed = document.getElementById('uploadSpeed');
+    const uploadRemaining = document.getElementById('uploadRemaining');
+    
+    // 拖放提示元素
+    const dragOverlay = document.getElementById('dragOverlay');
 
-    // 点击上传区域触发文件选择
-    dropArea.addEventListener('click', (e) => {
-        // 防止点击到上传状态区域时触发文件选择
-        if (e.target !== uploadStatus && !uploadStatus.contains(e.target)) {
-            fileInput.click();
-        }
-    });
-
-    // 监听拖拽事件
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-    });
-
+    // 防止默认拖放行为
     function preventDefaults(e) {
         e.preventDefault();
         e.stopPropagation();
     }
 
-    // 拖拽效果
+    // 高亮拖放区域
+    function highlight() {
+        dropArea.classList.add('drag-over');
+        // 显示拖放提示
+        dragOverlay.classList.add('active');
+    }
+
+    // 取消高亮拖放区域
+    function unhighlight() {
+        dropArea.classList.remove('drag-over');
+        // 隐藏拖放提示
+        dragOverlay.classList.remove('active');
+    }
+
+    // 拖放事件监听
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    // 拖入和拖悬停时高亮
     ['dragenter', 'dragover'].forEach(eventName => {
-        dropArea.addEventListener(eventName, () => {
-            dropArea.classList.add('drag-over');
-        }, false);
+        dropArea.addEventListener(eventName, highlight, false);
     });
 
+    // 拖离和放下时取消高亮
     ['dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, () => {
-            dropArea.classList.remove('drag-over');
-        }, false);
+        dropArea.addEventListener(eventName, unhighlight, false);
     });
 
-    // 处理文件拖放
-    dropArea.addEventListener('drop', (e) => {
-        const files = e.dataTransfer.files;
-        if (files.length) {
-            fileInput.files = files;
-            handleFiles(files);
-        }
+    // 处理拖放的文件
+    dropArea.addEventListener('drop', e => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
     });
 
-    // 监听文件选择
+    // 处理点击选择的文件
     fileInput.addEventListener('change', () => {
-        if (fileInput.files.length) {
-            handleFiles(fileInput.files);
-        }
+        handleFiles(fileInput.files);
     });
 
-    // 处理多个文件上传
+    // 点击上传区域触发文件选择
+    dropArea.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    // 再次上传按钮点击事件
+    uploadAgainBtn.addEventListener('click', () => {
+        resultContainer.style.display = 'none';
+        dropArea.style.display = 'block';
+        uploadStatus.textContent = '';
+        fileInput.value = '';
+    });
+
+    // 处理上传文件
     function handleFiles(files) {
-        // 检查所有文件是否都是图片
-        for (let i = 0; i < files.length; i++) {
-            if (!files[i].type.match('image.*')) {
-                showError('请确保所有上传的文件都是图片！');
-                return;
-            }
+        if (files.length === 0) return;
 
-            // 文件大小检查 (限制为10MB)
-            if (files[i].size > 10 * 1024 * 1024) {
-                showError('每个图片大小不能超过10MB！');
-                return;
-            }
-        }
-
-        // 显示上传中状态
-        uploadStatus.innerHTML = `<span class="loading-text">正在上传${files.length}张图片</span>`;
-        uploadStatus.className = 'upload-status loading';
-
-        // 准备表单数据
+        // 清空之前的状态
+        uploadStatus.classList.remove('error', 'success');
+        uploadStatus.textContent = '';
+        
+        // 准备FormData对象
         const formData = new FormData();
-        for (let i = 0; i < files.length; i++) {
-            formData.append('file', files[i]);
-        }
-
-        // 获取认证头
-        const headers = getAuthHeader();
-        console.log('上传请求 - 认证头:', headers);
-
-        // 发送请求
-        fetch('/upload', {
-            method: 'POST',
-            headers: headers, // 添加认证头
-            body: formData
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('上传失败，服务器响应错误');
+        
+        // 获取第一个文件用于上传进度显示
+        const file = files[0];
+        
+        // 添加文件到FormData
+        formData.append('image', file);
+        
+        // 显示上传中状态
+        uploadStatus.textContent = `正在上传 ${files.length} 个文件...`;
+        
+        // 隐藏结果容器，显示上传区域
+        resultContainer.style.display = 'none';
+        dropArea.style.display = 'block';
+        
+        // 准备上传进度显示
+        resetUploadProgress();
+        showUploadProgress();
+        uploadFileName.textContent = file.name;
+        
+        // 记录上传开始时间
+        const startTime = Date.now();
+        let lastLoaded = 0;
+        let currentSpeed = 0;
+        
+        // 创建XHR请求
+        const xhr = new XMLHttpRequest();
+        
+        // 监听上传进度
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                
+                // 更新进度条
+                uploadProgressBar.style.width = `${percentComplete}%`;
+                uploadPercentage.textContent = `${percentComplete}%`;
+                
+                // 计算上传速度
+                const currentTime = Date.now();
+                const elapsedTime = (currentTime - startTime) / 1000; // 转换为秒
+                
+                if (elapsedTime > 0) {
+                    // 计算每秒加载的字节数
+                    const loadDiff = event.loaded - lastLoaded;
+                    currentSpeed = loadDiff / (elapsedTime - lastLoaded ? (elapsedTime - lastLoaded) / 1000 : elapsedTime);
+                    lastLoaded = event.loaded;
+                    
+                    // 格式化速度
+                    const formattedSpeed = formatBytes(currentSpeed) + '/s';
+                    uploadSpeed.textContent = formattedSpeed;
+                    
+                    // 计算剩余时间
+                    if (currentSpeed > 0) {
+                        const remainingBytes = event.total - event.loaded;
+                        const remainingTime = remainingBytes / currentSpeed; // 秒
+                        uploadRemaining.textContent = `剩余时间：${formatTime(remainingTime)}`;
+                    }
+                }
             }
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            // 上传成功
-            uploadStatus.textContent = `上传成功！共${data.length}张图片`;
-            uploadStatus.className = 'upload-status success';
-
-            // 显示结果
-            showResults(data, files);
-        })
-        .catch(error => {
-            showError(`上传失败: ${error.message}`);
         });
+        
+        // 请求完成处理
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200 || xhr.status === 201) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    // 上传成功，显示结果
+                    showResults(response, files);
+                    // 隐藏上传进度
+                    hideUploadProgress();
+                } catch (e) {
+                    showError('解析响应失败，请重试');
+                    hideUploadProgress();
+                }
+            } else {
+                // 处理错误
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    showError(response.error || '上传失败，请重试');
+                } catch (e) {
+                    showError('上传失败，请重试');
+                }
+                hideUploadProgress();
+            }
+        });
+        
+        // 错误处理
+        xhr.addEventListener('error', () => {
+            showError('网络错误，请检查连接后重试');
+            hideUploadProgress();
+        });
+        
+        // 中止处理
+        xhr.addEventListener('abort', () => {
+            showError('上传已取消');
+            hideUploadProgress();
+        });
+        
+        // 发送请求
+        xhr.open('POST', '/upload');
+        
+        // 添加认证头（如果用户已登录）
+        const headers = getAuthHeader();
+        for (const key in headers) {
+            xhr.setRequestHeader(key, headers[key]);
+        }
+        
+        xhr.send(formData);
+    }
+
+    // 格式化文件大小
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+    
+    // 格式化时间（秒转为分:秒）
+    function formatTime(seconds) {
+        if (isNaN(seconds) || !isFinite(seconds)) return '计算中...';
+        if (seconds < 1) return '不到1秒';
+        
+        seconds = Math.round(seconds);
+        
+        if (seconds < 60) {
+            return `${seconds}秒`;
+        }
+        
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        
+        return `${minutes}分${remainingSeconds}秒`;
+    }
+    
+    // 显示上传进度
+    function showUploadProgress() {
+        uploadProgressContainer.classList.add('active');
+    }
+    
+    // 隐藏上传进度
+    function hideUploadProgress() {
+        uploadProgressContainer.classList.remove('active');
+        
+        // 延迟移除，以便动画能够完成
+        setTimeout(() => {
+            uploadProgressContainer.style.display = 'none';
+        }, 400);
+    }
+    
+    // 重置上传进度
+    function resetUploadProgress() {
+        uploadProgressContainer.style.display = 'block';
+        uploadProgressBar.style.width = '0%';
+        uploadPercentage.textContent = '0%';
+        uploadFileName.textContent = '准备上传...';
+        uploadSpeed.textContent = '计算中...';
+        uploadRemaining.textContent = '剩余时间：计算中...';
     }
 
     // 显示错误信息
     function showError(message) {
         uploadStatus.textContent = message;
-        uploadStatus.className = 'upload-status error';
-
-        // 震动效果
-        dropArea.classList.add('shake');
-        setTimeout(() => {
-            dropArea.classList.remove('shake');
-        }, 500);
+        uploadStatus.classList.add('error');
+        uploadStatus.classList.remove('success');
     }
 
-    // 显示多个上传结果
-    function showResults(results, files) {
-        // 获取或创建图片列表容器
-        let imageListContainer = document.getElementById('imageListContainer');
-        if (!imageListContainer) {
-            // 创建图片列表容器
-            imageListContainer = document.createElement('div');
-            imageListContainer.id = 'imageListContainer';
-            imageListContainer.className = 'image-list-container';
-            resultContainer.insertBefore(imageListContainer, resultContainer.querySelector('.link-group'));
-        } else {
-            // 清空现有内容
-            imageListContainer.innerHTML = '';
-        }
-
-        // 构建基本URL
-        const baseUrl = window.location.origin;
-
-        // 如果只有一个图片，仍然使用旧的预览方式
-        if (results.length === 1) {
-            const fileUrl = baseUrl + results[0].src;
-
-            // 设置图片预览
-            previewImage.src = fileUrl;
-            previewImage.alt = files[0].name;
-
-            // 设置各种代码
-            directLink.value = fileUrl;
-            htmlCode.value = `<img src="${fileUrl}" alt="${files[0].name}" />`;
-            mdCode.value = `![${files[0].name}](${fileUrl})`;
-        } else {
-            // 批量上传的情况，创建图片列表
-            for (let i = 0; i < results.length; i++) {
-                const fileUrl = baseUrl + results[i].src;
-                const fileName = files[i] ? files[i].name : `图片${i+1}`;
-
-                // 创建缩略图项
-                const imageItem = document.createElement('div');
-                imageItem.className = 'image-item';
-
-                // 创建图片元素
-                const img = document.createElement('img');
-                img.src = fileUrl;
-                img.alt = fileName;
-                img.addEventListener('click', () => {
-                    // 点击单张图片时更新主预览和链接
-                    previewImage.src = fileUrl;
-                    previewImage.alt = fileName;
-                    directLink.value = fileUrl;
-                    htmlCode.value = `<img src="${fileUrl}" alt="${fileName}" />`;
-                    mdCode.value = `![${fileName}](${fileUrl})`;
-                });
-
-                // 添加到容器
-                imageItem.appendChild(img);
-                imageListContainer.appendChild(imageItem);
-            }
-
-            // 默认选中第一张图片
-            if (results.length > 0) {
-                const firstFileUrl = baseUrl + results[0].src;
-                const firstName = files[0] ? files[0].name : '图片1';
-
-                // 设置默认预览
-                previewImage.src = firstFileUrl;
-                previewImage.alt = firstName;
-
-                // 设置默认代码
-                directLink.value = firstFileUrl;
-                htmlCode.value = `<img src="${firstFileUrl}" alt="${firstName}" />`;
-                mdCode.value = `![${firstName}](${firstFileUrl})`;
-            }
-        }
-
-        // 隐藏上传区域，显示结果
+    // 显示上传结果
+    function showResults(response, files) {
+        // 隐藏上传区域，显示结果容器
         dropArea.style.display = 'none';
         resultContainer.style.display = 'block';
+        
+        // 设置预览图片
+        if (files.length > 0) {
+            const file = files[0];
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+            };
+            
+            reader.readAsDataURL(file);
+        } else if (response.data && response.data.url) {
+            previewImage.src = response.data.url;
+        }
+        
+        // 设置链接
+        if (response.data) {
+            const url = response.data.publicUrl || response.data.url;
+            
+            if (url) {
+                // 设置直接链接
+                directLink.value = url;
+                
+                // 设置HTML代码
+                const fileName = response.data.originalName || files[0].name;
+                htmlCode.value = `<img src="${url}" alt="${fileName}" />`;
+                
+                // 设置Markdown代码
+                mdCode.value = `![${fileName}](${url})`;
+                
+                // 显示成功消息
+                uploadStatus.textContent = '上传成功！';
+                uploadStatus.classList.add('success');
+                uploadStatus.classList.remove('error');
+            }
+        }
+        
+        // 添加动画效果
+        resultContainer.classList.add('fadeIn');
     }
-
-    // 再次上传
-    uploadAgainBtn.addEventListener('click', () => {
-        // 清空文件输入
-        fileInput.value = '';
-        uploadStatus.textContent = '';
-        uploadStatus.className = 'upload-status';
-
-        // 隐藏结果，显示上传区域
-        resultContainer.style.display = 'none';
-        dropArea.style.display = 'block';
-    });
 }
 
 // 图片预览功能

@@ -129,6 +129,35 @@
                     <p class="upload-hint">支持批量上传多张图片</p>
                     <input type="file" id="fileInput" class="file-input" accept="image/*" multiple>
                     <div class="upload-status" id="uploadStatus"></div>
+                    
+                    <!-- 新增：上传进度容器 -->
+                    <div class="upload-progress-container" id="uploadProgressContainer">
+                        <div class="upload-progress-info">
+                            <span class="upload-file-name" id="uploadFileName">正在上传...</span>
+                            <span class="upload-percentage" id="uploadPercentage">0%</span>
+                        </div>
+                        <div class="upload-progress-bar-container">
+                            <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                        </div>
+                        <div class="upload-progress-details">
+                            <span id="uploadSpeed">0 KB/s</span>
+                            <span id="uploadRemaining">剩余时间：计算中...</span>
+                        </div>
+                    </div>
+
+                    <!-- 新增：拖放提示 -->
+                    <div class="drag-overlay" id="dragOverlay">
+                        <div class="drag-overlay-content">
+                            <div class="drag-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                            </div>
+                            <p class="drag-text">松开鼠标上传图片</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="result-container" id="resultContainer" style="display: none;">
